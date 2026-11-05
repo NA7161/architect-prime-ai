@@ -1,0 +1,9 @@
+{
+  "name": "ARCHITECT PRIME AI ChatGPT Actions",
+  "version": "1.0.0",
+  "status": "installation_candidate",
+  "official_plugin": false,
+  "core_included": true,
+  "cad_bim": false,
+  "persistent_storage": false
+}
