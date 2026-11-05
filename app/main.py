@@ -1,10 +1,12 @@
 import os, uuid, secrets
-from fastapi import FastAPI, Header, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Security
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 app=FastAPI(title="ARCHITECT PRIME AI Actions",version="1.0.0",
     servers=[{"url":os.getenv("PUBLIC_BASE_URL","https://YOUR-DOMAIN.example")}])
 db={}
-def auth(x_api_key: str|None=Header(default=None)):
+api_key_header=APIKeyHeader(name="X-API-Key",auto_error=False)
+def auth(x_api_key: str|None=Security(api_key_header)):
     key=os.getenv("ARCHITECT_API_KEY")
     if not key: raise HTTPException(503,"API key not configured")
     if not x_api_key or not secrets.compare_digest(x_api_key,key):
@@ -46,17 +48,17 @@ class Estimate(BaseModel):
 def project(pid):
     if pid not in db:raise HTTPException(404,"Unknown project")
     return db[pid]
-@app.get("/health")
+@app.get("/health",operation_id="health")
 def health():return {"status":"ok","storage":"ephemeral","cad_bim":False}
-@app.post("/projects",dependencies=[Depends(auth)])
+@app.post("/projects",operation_id="create_project",dependencies=[Depends(auth)])
 def create_project(data:Project):
     pid=str(uuid.uuid4());db[pid]=data.model_dump()
     return {"project_id":pid,"gate":"G1_pending","project":db[pid],
       "notice":"Concept only; not for construction"}
-@app.get("/projects/{project_id}",dependencies=[Depends(auth)])
+@app.get("/projects/{project_id}",operation_id="get_project",dependencies=[Depends(auth)])
 def get_project(project_id:str):
     return {"project_id":project_id,"project":project(project_id)}
-@app.post("/concepts/compare",dependencies=[Depends(auth)])
+@app.post("/concepts/compare",operation_id="compare",dependencies=[Depends(auth)])
 def compare(req:Comparison):
     project(req.project_id)
     w={"function":.3,"cost":.2,"climate":.2,"buildability":.2,"aesthetics":.1}
@@ -64,7 +66,7 @@ def compare(req:Comparison):
        for c in req.concepts],key=lambda x:x["score"],reverse=True)
     return {"ranking":ranked,"weights":w,"gate":"G1_pending",
        "caveat":"Scores are subjective inputs, not validated engineering results"}
-@app.post("/estimates/calculate",dependencies=[Depends(auth)])
+@app.post("/estimates/calculate",operation_id="estimate",dependencies=[Depends(auth)])
 def estimate(req:Estimate):
     project(req.project_id)
     rows=[{"item":x.item,"total":round(x.quantity*x.unit_price,2),"source":x.source}
@@ -74,7 +76,7 @@ def estimate(req:Estimate):
       "total":round(subtotal*(1+req.contingency_pct/100),2),
       "currency":req.currency,"price_date":req.price_date,"gate":"G3_pending",
       "caveat":"Arithmetic only; input prices unverified"}
-@app.get("/projects/{project_id}/qa",dependencies=[Depends(auth)])
+@app.get("/projects/{project_id}/qa",operation_id="qa",dependencies=[Depends(auth)])
 def qa(project_id:str):
     p=project(project_id);issues=[]
     for k in ("site_area_m2","floor_area_m2","geology_verified","seismic_verified","codes_verified"):
